@@ -1,134 +1,120 @@
 # sklearn2c
 
-Projet pour convertir des modèles scikit-learn en code C pour microcontrôleurs.
+**Transpile trained scikit-learn models to dependency-free C code — deploy ML on any microcontroller.**
 
-## Pourquoi ce projet ?
-
-J'avais besoin de déployer des modèles ML sur un Arduino pour un projet IoT, mais sklearn ne tourne pas sur microcontrôleur. J'ai donc créé ce transpileur qui prend un modèle entraîné et génère du code C pur sans dépendances.
-
-## Ce qui marche
-
-- Régression linéaire
-- Régression logistique  
-- Arbres de décision
-
-## Installation
-
-```bash
-pip install scikit-learn pandas joblib numpy
-```
-
-## Utilisation
-
-### 1. Entraîner un modèle
-
-```bash
-python train_model.py
-```
-
-### 2. Le convertir en C
-
-```bash
-python transpile_simple_model.py regression.joblib
-```
-
-### 3. Compiler et tester
-
-```bash
-./generated_model
-```
-
-## Exemples
-
-### Régression linéaire
-
-```python
-from sklearn.linear_model import LinearRegression
-import joblib
-
-model = LinearRegression()
-model.fit(X, y)
-joblib.dump(model, 'model.joblib')
-```
-
-Puis :
 ```bash
 python transpile_simple_model.py model.joblib
+# → generated_model.c  (pure C, no libraries, compiles anywhere)
 ```
 
-### Arbre de décision
+---
 
-```python
-from sklearn.tree import DecisionTreeClassifier
-import joblib
+## Why
 
-model = DecisionTreeClassifier(max_depth=3)
-model.fit(X, y)
-joblib.dump(model, 'tree.joblib')
+scikit-learn doesn't run on microcontrollers. Existing solutions (ONNX, TFLite Micro) require a runtime and add significant flash/RAM overhead. sklearn2c takes a different approach: it **walks the trained model's internal parameters** and hard-codes them as a pure C function — no interpreter, no memory allocation, no dependencies beyond `stdio.h`.
+
+The output compiles with `gcc`, `arm-none-eabi-gcc`, or any standard C compiler and drops directly into Arduino, STM32, ESP32 firmware.
+
+## Supported Models
+
+| Model | Output type | Generated function |
+|---|---|---|
+| `LinearRegression` | `float` | `float predict(float *features, int n)` |
+| `LogisticRegression` | `int` | `int predict(float *features, int n)` |
+| `DecisionTreeClassifier` | `int` | `int predict(float *features, int n)` |
+
+## Quick Start
+
+```bash
+# 1. Install
+pip install scikit-learn pandas joblib numpy
+
+# 2. Train a model
+python train_model.py             # LinearRegression on house prices
+python train_decision_tree.py     # DecisionTree on student data
+
+# 3. Transpile to C
+python transpile_simple_model.py regression.joblib
+# → generated_model.c
+
+# 4. Compile and run
+gcc generated_model.c -o model && ./model
+
+# 5. Copy predict() into your Arduino/firmware sketch
 ```
 
-## Code C généré
+## Generated Code Example
 
-Le code généré est du C pur, juste avec `stdio.h`, pas besoin de bibliothèque ML.
-
-### Régression
-
-```c
-float prediction(float *features, int n_features) {
-    float result = INTERCEPT;
-    for (int i = 0; i < n_features; i++) {
-        result += COEFFICIENTS[i] * features[i];
-    }
-    return result;
-}
-```
-
-### Arbre
+Decision tree with depth 3 produces clean, readable C:
 
 ```c
 int predict(float *features, int n_features) {
-    if (features[1] <= -0.299f) {
-        if (features[0] <= -0.077f) {
+    if (features[1] <= -0.2990f) {
+        if (features[0] <= -0.0770f) {
             return 1;
         } else {
             return 0;
         }
     } else {
-        // ... autres branches
+        return 2;
     }
 }
 ```
 
-## Sur Arduino
+Linear regression:
 
-Il suffit de copier la fonction `prediction()` générée dans votre code Arduino :
+```c
+float predict(float *features, int n_features) {
+    float result = 150432.123f;           // intercept
+    result += features[0] * 85.34f;
+    result += features[1] * -312.77f;
+    return result;
+}
+```
+
+## Deploy on Arduino
+
+Copy the generated `predict()` into your sketch — no libraries needed:
 
 ```cpp
+// paste generated predict() here
+
 void loop() {
-    float sensors[] = {analogRead(A0), analogRead(A1)};
-    float pred = prediction(sensors, 2);
+    float sensors[2] = { analogRead(A0) / 1023.0f, analogRead(A1) / 1023.0f };
+    float pred = predict(sensors, 2);
     Serial.println(pred);
     delay(1000);
 }
 ```
 
-## Structure du projet
+## How It Works
+
+1. Load the `.joblib` model with Python
+2. Introspect internal parameters (coefficients, tree nodes, thresholds)
+3. Generate C source with parameters as compile-time constants
+4. The `predict()` function is a series of branches / dot products — no loops over parameters
+
+## Project Structure
 
 ```
-mlops/
-├── transpile_simple_model.py    # Script principal
-├── train_model.py               # Exemple régression linéaire
-├── train_logistic.py            # Exemple régression logistique
-├── train_decision_tree.py       # Exemple arbre de décision
-├── generated_model.c            # Code C généré
-├── houses.csv                   # Données d'exemple
-├── students.csv                 # Données d'exemple
+sklearn2c/
+├── transpile_simple_model.py    # Core transpiler
+├── train_model.py               # Example: LinearRegression
+├── train_logistic.py            # Example: LogisticRegression
+├── train_decision_tree.py       # Example: DecisionTree
+├── generated_model.c            # Example output
+├── houses.csv / students.csv    # Sample datasets
 └── README.md
 ```
 
-## Comment ça marche
+## Roadmap
 
-1. Le script charge le modèle `.joblib`
-2. Il extrait les paramètres (coefficients, structure de l'arbre, etc.)
-3. Il génère du code C avec ces paramètres en dur
-4. Il compile avec gcc
+- [ ] `RandomForestClassifier` (ensemble of trees)
+- [ ] `SVC` with RBF kernel
+- [ ] `MLPClassifier` (dense layers)
+- [ ] Automated flash/RAM size estimation
+- [ ] Arduino `.ino` file output
+
+## License
+
+MIT
