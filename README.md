@@ -61,16 +61,19 @@ int predict(float *features, int n_features) {
 }
 ```
 
-Linear regression:
+Linear/logistic regression:
 
 ```c
-float predict(float *features, int n_features) {
+float prediction(float *features, int n_features) {
     float result = 150432.123f;           // intercept
     result += features[0] * 85.34f;
     result += features[1] * -312.77f;
     return result;
 }
 ```
+
+> Note: regression models generate a function named `prediction()`, decision trees generate `predict()`.
+
 
 ## Deploy on Arduino
 
