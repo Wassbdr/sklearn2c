@@ -1,6 +1,6 @@
 # sklearn2c
 
-**Transpile trained scikit-learn models to dependency-free C code — deploy ML on any microcontroller.**
+**Transpile trained scikit-learn models to dependency-free C code, and deploy ML on any microcontroller.**
 
 ```bash
 python transpile_simple_model.py model.joblib
@@ -11,7 +11,7 @@ python transpile_simple_model.py model.joblib
 
 ## Why
 
-scikit-learn doesn't run on microcontrollers. Existing solutions (ONNX, TFLite Micro) require a runtime and add significant flash/RAM overhead. sklearn2c takes a different approach: it **walks the trained model's internal parameters** and hard-codes them as a pure C function — no interpreter, no memory allocation, no dependencies beyond `stdio.h`.
+scikit-learn doesn't run on microcontrollers, and existing solutions (ONNX, TFLite Micro) require a runtime that adds significant flash/RAM overhead. sklearn2c **walks the trained model's internal parameters** and hard-codes them as a pure C function. There is no interpreter, no memory allocation, and no dependency beyond `stdio.h`.
 
 The output compiles with `gcc`, `arm-none-eabi-gcc`, or any standard C compiler and drops directly into Arduino, STM32, ESP32 firmware.
 
@@ -77,7 +77,7 @@ float prediction(float *features, int n_features) {
 
 ## Deploy on Arduino
 
-Copy the generated `predict()` into your sketch — no libraries needed:
+Copy the generated `predict()` into your sketch, no libraries needed:
 
 ```cpp
 // paste generated predict() here
@@ -95,7 +95,7 @@ void loop() {
 1. Load the `.joblib` model with Python
 2. Introspect internal parameters (coefficients, tree nodes, thresholds)
 3. Generate C source with parameters as compile-time constants
-4. The `predict()` function is a series of branches / dot products — no loops over parameters
+4. The `predict()` function is a series of branches / dot products, with no loops over parameters
 
 ## Project Structure
 
