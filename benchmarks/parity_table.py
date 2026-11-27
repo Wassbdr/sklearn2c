@@ -99,6 +99,7 @@ def linear_boundary_stress(clf_data, n=2000):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="10 trees per forest instead of 50")
+    ap.add_argument("-v", "--verbose", action="store_true", help="print each parity report")
     args = ap.parse_args()
     n_trees = 10 if args.quick else 50
     clf_data, reg_data = datasets()
@@ -129,7 +130,8 @@ def main():
             row["cortex_m4_static_ram_bytes"] = arm["data"] + arm["bss"]
             row["cortex_m4_stack_bytes"] = arm["stack"]
         rows.append(row)
-        print(f"{name:<24} {rep.summary()}")
+        if args.verbose or not rep.ok:
+            print(f"{name:<24} {rep.summary()}")
 
     env = {
         "data": "make_classification(2000, 8 features, 3 classes -> labels 10/20/30) and "
@@ -149,7 +151,19 @@ def main():
     (OUT / "parity.json").write_text(json.dumps({"setup": env, "rows": rows, "linear_boundary_stress": stress},
                                                 indent=2) + "\n")
     (OUT / "parity.md").write_text(render_md(env, rows, stress, have_arm))
-    print((OUT / "parity.md").read_text())
+    print_terminal(rows, stress, have_arm, env)
+
+
+def print_terminal(rows, stress, have_arm, env):
+    """Compact table that fits an 80-column terminal (the full one is in parity.md)."""
+    print(f"\n{'model':<24}{'compared':>9}{'mismatch':>9}{'M4 flash':>10}{'latency':>11}")
+    for r in rows:
+        flash = f"{r['cortex_m4_flash_bytes']:,}B" if have_arm else "-"
+        print(f"{r['model']:<24}{r['n_samples']:>9}{r['n_mismatches']:>9}{flash:>10}{r['latency_ns']:>9.1f}ns")
+    print(f"latency: {env['hardware']}")
+    print("boundary stress, binary LogisticRegression on z=0: "
+          + ", ".join(f"{s['accumulator']} {s['n_mismatches']}/{s['n_samples']} mismatches" for s in stress))
+    print(f"wrote {OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}/parity.md")
 
 
 def render_md(env, rows, stress, have_arm) -> str:

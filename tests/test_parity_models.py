@@ -101,12 +101,15 @@ def test_threshold_exactly_representable():
 
 
 def test_threshold_not_representable_in_float32():
-    """A float64 threshold between two float32 values: C must route like sklearn."""
+    """Training values 3 ulps apart: the float64 midpoint sits between two float32
+    values. The float32 just below must go left, the one just above right."""
+    up = lambda v, n: v if n == 0 else up(np.nextafter(v, np.float32(2)), n - 1)  # noqa: E731
     a = np.float32(1.0)
-    b = np.nextafter(a, np.float32(2))
-    X = np.array([[a], [b]], dtype=np.float32)
+    X = np.array([[a], [up(a, 3)]], dtype=np.float32)
     model = tree.DecisionTreeClassifier().fit(X, [1, 2])
     t = model.tree_.threshold[0]
-    assert np.float32(t) != t  # the midpoint has no float32 representation
+    assert model.tree_.node_count == 3 and np.float32(t) != t
+    probes = np.array([[a], [up(a, 1)], [up(a, 2)], [up(a, 3)]], dtype=np.float32)
+    assert list(model.predict(probes)) == [1, 1, 2, 2]
     lib = compile_shared(transpile(model), prefix="model", is_classifier=True, n_features=1)
-    np.testing.assert_array_equal(lib.predict(X), model.predict(X))
+    assert list(lib.predict(probes)) == [1, 1, 2, 2]

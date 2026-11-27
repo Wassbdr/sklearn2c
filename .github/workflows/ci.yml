@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  parity:
+    name: parity tests (gcc, python ${{ matrix.python }}, sklearn ${{ matrix.sklearn }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.9", sklearn: "1.3.*" }
+          - { python: "3.11", sklearn: "1.5.*" }
+          - { python: "3.12", sklearn: "1.7.*" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          gcc --version | head -1
+          python -m pip install --upgrade pip
+          python -m pip install ".[test]" "scikit-learn==${{ matrix.sklearn }}"
+      - name: Parity tests (compiled C vs scikit-learn)
+        run: python -m pytest -v
+      - name: CLI smoke test from the installed package
+        run: |
+          cd "$(mktemp -d)"
+          python "$GITHUB_WORKSPACE/examples/train_fault_classifier.py"
+          sklearn2c fault_tree.joblib -o fault_tree.c --verify
+          sklearn2c fault_tree.joblib -o fault_tree.c --verify-data fault_test.csv
+
+  cortex-m:
+    name: Cortex-M4 cross-compile + parity table
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q gcc-arm-none-eabi libnewlib-arm-none-eabi
+          python -m pip install ".[test]"
+      - name: Build firmware for each example model
+        run: |
+          cd "$(mktemp -d)"
+          python "$GITHUB_WORKSPACE/examples/train_fault_classifier.py"
+          python "$GITHUB_WORKSPACE/examples/train_fault_classifier.py" --model forest
+          for m in fault_tree fault_forest; do
+            sklearn2c $m.joblib -o $m.c --verify
+            "$GITHUB_WORKSPACE/examples/arm_cortex_m/build.sh" $m.c out/$m
+          done
+      - name: Parity table (quick)
+        run: |
+          python benchmarks/parity_table.py --quick
+          cat benchmarks/results/parity.md >> "$GITHUB_STEP_SUMMARY"
