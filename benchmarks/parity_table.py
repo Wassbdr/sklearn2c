@@ -148,13 +148,14 @@ def main():
     }
     stress = linear_boundary_stress(clf_data)
     OUT.mkdir(exist_ok=True)
-    (OUT / "parity.json").write_text(json.dumps({"setup": env, "rows": rows, "linear_boundary_stress": stress},
-                                                indent=2) + "\n")
-    (OUT / "parity.md").write_text(render_md(env, rows, stress, have_arm))
-    print_terminal(rows, stress, have_arm, env)
+    stem = "parity_quick" if args.quick else "parity"  # --quick never overwrites the published table
+    (OUT / f"{stem}.json").write_text(json.dumps({"setup": env, "rows": rows, "linear_boundary_stress": stress},
+                                                 indent=2) + "\n")
+    (OUT / f"{stem}.md").write_text(render_md(env, rows, stress, have_arm))
+    print_terminal(rows, stress, have_arm, env, stem)
 
 
-def print_terminal(rows, stress, have_arm, env):
+def print_terminal(rows, stress, have_arm, env, stem):
     """Compact table that fits an 80-column terminal (the full one is in parity.md)."""
     print(f"\n{'model':<24}{'compared':>9}{'mismatch':>9}{'M4 flash':>10}{'latency':>11}")
     for r in rows:
@@ -163,7 +164,7 @@ def print_terminal(rows, stress, have_arm, env):
     print(f"latency: {env['hardware']}")
     print("boundary stress, binary LogisticRegression on z=0: "
           + ", ".join(f"{s['accumulator']} {s['n_mismatches']}/{s['n_samples']} mismatches" for s in stress))
-    print(f"wrote {OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}/parity.md")
+    print(f"wrote {OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}/{stem}.md")
 
 
 def render_md(env, rows, stress, have_arm) -> str:

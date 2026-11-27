@@ -29,7 +29,7 @@ model = DecisionTreeClassifier(max_depth=5, random_state=0).fit(Xtr, ytr)  # as 
 report = verify_predictions(model, X=Xte)
 c_lines = transpile(model).splitlines()
 start = next(i for i, l in enumerate(c_lines) if l.startswith("int32_t model_predict_index"))
-c_snippet = c_lines[start:start + 18] + ["    ...", "}", ""] + c_lines[-4:]
+c_snippet = c_lines[start:start + 15] + ["    ...", "}", "", "/* label = classes_[index] */"] + c_lines[-3:]
 
 py = """import joblib
 from sklearn.tree import DecisionTreeClassifier
@@ -41,7 +41,7 @@ from sklearn.tree import DecisionTreeClassifier
 model = DecisionTreeClassifier(max_depth=5)
 model.fit(X_train, y_train)
 joblib.dump(model, "fault_tree.joblib")
-""".splitlines() + ["", "$ sklearn2c fault_tree.joblib \\", "   -o fault_tree.c --verify-data fault_test.csv",
+""".splitlines() + ["", "$ sklearn2c fault_tree.joblib \\", "    -o fault_tree.c \\", "    --verify-data fault_test.csv",
                     report.summary().split(" (")[0], "(" + report.summary().split(" (", 1)[1]]
 
 res = json.loads((ROOT / "benchmarks" / "results" / "parity.json").read_text())
@@ -51,7 +51,7 @@ rows = [r for r in res["rows"] if r["model"] in pick]
 
 fig = plt.figure(figsize=(12.8, 7.2), dpi=100, facecolor=BG)
 fig.text(0.03, 0.93, "sklearn2c", color=ACC, fontsize=30, weight="bold", family="DejaVu Sans")
-fig.text(0.205, 0.935, "scikit-learn models -> dependency-free C for microcontrollers,\n"
+fig.text(0.235, 0.935, "scikit-learn models -> dependency-free C for microcontrollers,\n"
          "checked sample by sample against the compiled code", color=FG, fontsize=13, va="center")
 
 
@@ -64,23 +64,23 @@ def panel(x, w, title, lines, size=9.6, colors=None):
     ax.set_title(title, color=DIM, fontsize=11, loc="left")
     for i, line in enumerate(lines):
         col = (colors or {}).get(i, FG)
-        ax.text(0.03, 0.97 - i * 0.043, line, color=col, fontsize=size, family="DejaVu Sans Mono",
+        ax.text(0.03, 0.97 - i * 0.045, line, color=col, fontsize=size, family="DejaVu Sans Mono",
                 va="top", transform=ax.transAxes)
 
 
 py_colors = {i: DIM for i, l in enumerate(py) if l.startswith("#")}
 py_colors.update({len(py) - 2: OK, len(py) - 1: OK})
-panel(0.03, 0.285, "Python  (examples/train_fault_classifier.py)", py, 9.4, py_colors)
-panel(0.33, 0.30, "generated C  (sklearn2c fault_tree.joblib -o fault_tree.c)", c_snippet, 9.0,
+panel(0.03, 0.285, "Python  (examples/train_fault_classifier.py)", py, 8.4, py_colors)
+panel(0.33, 0.30, "generated C  (fault_tree.c)", c_snippet, 8.8,
       {i: ACC for i, l in enumerate(c_snippet) if "return MODEL_CLASSES" in l or "MODEL_CLASSES" in l})
 
 ax = fig.add_axes([0.645, 0.10, 0.335, 0.76])
 ax.set_facecolor("#181825"); ax.set_xticks([]); ax.set_yticks([])
 for s in ax.spines.values():
     s.set_color("#313244")
-ax.set_title("parity: compiled C vs sklearn.predict", color=DIM, fontsize=11, loc="left")
+ax.set_title("parity: compiled C vs sklearn.predict()", color=DIM, fontsize=11, loc="left")
 hdr = ["model", "compared", "mism.", "M4 flash", "x86 ns"]
-xs = [0.03, 0.47, 0.64, 0.76, 0.93]
+xs = [0.03, 0.50, 0.63, 0.82, 0.97]
 for x, h in zip(xs, hdr):
     ax.text(x, 0.95, h, color=DIM, fontsize=9.5, ha="left" if x < 0.1 else "right", transform=ax.transAxes,
             family="DejaVu Sans Mono")

@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 
-for tool in python3 gcc size arm-none-eabi-gcc vhs ttyd ffmpeg; do
+for tool in python3 gcc size arm-none-eabi-gcc vhs ttyd ffmpeg ffprobe; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
 done
 

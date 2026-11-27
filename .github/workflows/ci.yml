@@ -58,4 +58,4 @@ jobs:
       - name: Parity table (quick)
         run: |
           python benchmarks/parity_table.py --quick
-          cat benchmarks/results/parity.md >> "$GITHUB_STEP_SUMMARY"
+          cat benchmarks/results/parity_quick.md >> "$GITHUB_STEP_SUMMARY"

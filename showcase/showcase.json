@@ -1,0 +1,89 @@
+{
+  "slug": "sklearn2c",
+  "title": "sklearn2c",
+  "tagline": "Transpile fitted scikit-learn models to dependency-free C for microcontrollers, verified sample by sample against the compiled code.",
+  "problem": "scikit-learn does not run on microcontrollers, and runtimes such as TFLite Micro or ONNX add flash, RAM and a toolchain. Hand-porting a model to C is error-prone: the original transpiler returned class indices instead of labels and its 'verification' never executed the C.",
+  "approach": "sklearn2c reads the fitted parameters (tree nodes, forest tables, coefficients) and emits C99 with them as const data and a single predict(const float *x). Leaves map through classes_, tree thresholds are emitted as the largest float32 <= the float64 threshold so routing is bit-identical to sklearn, and verify_predictions compiles the C with gcc, calls it through ctypes and compares every sample, including inputs exactly on each split.",
+  "stack": [
+    "Python",
+    "scikit-learn",
+    "NumPy",
+    "C99",
+    "gcc",
+    "arm-none-eabi-gcc",
+    "ctypes",
+    "pytest",
+    "GitHub Actions"
+  ],
+  "demo": {
+    "gif": "showcase/demo.gif",
+    "mp4": "showcase/demo.mp4",
+    "poster": "showcase/poster.png",
+    "kind": "live",
+    "caption": "Live terminal run: train a fault classifier with labels 10/20/30, export it to C, compile it with gcc, check parity on held-out data, print the parity table for every supported model, then show the clear error raised for string labels."
+  },
+  "reproduce": [
+    "pip install .",
+    "python -m pytest",
+    "bash showcase/make_showcase.sh"
+  ],
+  "results": [
+    {
+      "label": "Compiled-C vs sklearn.predict mismatches, 15 estimator types",
+      "value": "0 / 32,062 samples",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "synthetic make_classification/make_regression, seed 0; held-out + random + split-boundary probes; gcc -O2 -shared via ctypes; x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor"
+    },
+    {
+      "label": "DecisionTreeClassifier (max_depth=8) latency per sample",
+      "value": "3.2 ns",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "synthetic make_classification/make_regression, seed 0; gcc -O2; x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor"
+    },
+    {
+      "label": "RandomForestClassifier (50 trees, max_depth=8) latency per sample",
+      "value": "2.02 us",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "synthetic make_classification/make_regression, seed 0; gcc -O2; x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor"
+    },
+    {
+      "label": "Cortex-M4F flash, DecisionTreeClassifier (max_depth=8)",
+      "value": "1,652 B",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "synthetic make_classification/make_regression, seed 0; arm-none-eabi-gcc 10.3.1 -Os -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16; object size, compiled not run"
+    },
+    {
+      "label": "Cortex-M4F flash, RandomForestClassifier (50 trees, max_depth=8)",
+      "value": "80.4 KiB",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "synthetic make_classification/make_regression, seed 0; arm-none-eabi-gcc 10.3.1 -Os -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16; object size, compiled not run"
+    },
+    {
+      "label": "Bare-metal firmware with the 20-tree fault forest (flash / RAM)",
+      "value": "4,276 B / 132 B",
+      "command": "examples/arm_cortex_m/build.sh fault_forest.c",
+      "setup": "examples/train_fault_classifier.py --model forest (seed 0); arm-none-eabi-gcc -Os, linked, not run"
+    },
+    {
+      "label": "Linear classifier inputs exactly on the decision boundary, label flips",
+      "value": "float 799/2000, double 0/2000",
+      "command": "python benchmarks/parity_table.py",
+      "setup": "binary LogisticRegression, inputs projected onto z=0, seed 0; x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor"
+    },
+    {
+      "label": "Test suite (pytest, compiles every model with gcc)",
+      "value": "78 passed in 4.56s",
+      "command": "python -m pytest",
+      "setup": "python 3.10.12, scikit-learn 1.7.2, numpy 2.2.6, sklearn2c 0.2.0; x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor"
+    }
+  ],
+  "limits": [
+    "Integer class labels only (int32); string labels must be encoded with LabelEncoder first.",
+    "Linear models accumulate in float by default; inputs within float rounding of the decision boundary can flip label (compile with -DSKLEARN2C_REAL=double for exact parity).",
+    "Forest classifiers accumulate probabilities in double to match sklearn exactly; this is software-emulated on Cortex-M4F.",
+    "No Pipeline / preprocessing export, no NaN (missing value) routing, no gradient boosting, SVM kernels or MLPs.",
+    "Latency measured on an x86 VM, not on a microcontroller; ARM builds are compiled and linked, not run."
+  ],
+  "role": "TODO",
+  "repo": "https://github.com/Wassbdr/sklearn2c"
+}

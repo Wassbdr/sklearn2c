@@ -1,0 +1,8 @@
+## fault_tree
+target   : Cortex-M4F (thumb, hard float), arm-none-eabi-gcc 10.3.1 -Os
+model.o  : flash 124 B, static RAM 0 B, stack <= 8 B
+firmware : flash 216 B of 1048576, RAM 132 B of 131072 (+ stack)  -> arm/fault_tree/firmware.elf
+## fault_forest
+target   : Cortex-M4F (thumb, hard float), arm-none-eabi-gcc 10.3.1 -Os
+model.o  : flash 1798 B, static RAM 0 B, stack <= 72 B
+firmware : flash 4276 B of 1048576, RAM 132 B of 131072 (+ stack)  -> arm/fault_forest/firmware.elf

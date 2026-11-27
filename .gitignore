@@ -42,3 +42,4 @@ fault_test.csv
 generated_model.c
 /out/
 showcase/work/
+benchmarks/results/parity_quick.*
