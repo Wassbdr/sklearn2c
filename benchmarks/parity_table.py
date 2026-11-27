@@ -25,6 +25,7 @@ from sklearn.model_selection import train_test_split
 import sklearn2c
 from sklearn2c import inspect_model, probe_inputs, transpile, verify_predictions
 from sklearn2c.native import compile_shared, latency_ns, object_size
+from sklearn2c.parity import exact_decision_function, linear_boundary_probes, linear_rounding_bound
 
 OUT = Path(__file__).parent / "results"
 ARM_CC = "arm-none-eabi-gcc"
@@ -78,29 +79,56 @@ def gcc_version(cc: str) -> str:
     return subprocess.run([cc, "-dumpfullversion"], capture_output=True, text=True).stdout.strip()
 
 
-def linear_boundary_stress(clf_data, n=2000):
-    """Points projected onto a binary LogisticRegression decision boundary: the
-    worst case for float32 accumulation (labels decided by the last bits)."""
+BINS = (0.0, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, np.inf)
+
+
+def linear_boundary_stress(clf_data):
+    """Binary LogisticRegression probed at controlled distances from its decision boundary.
+
+    Reference = exact sign of z (rational arithmetic on the float32 inputs), not sklearn.predict:
+    near z = 0 sklearn's own label depends on its dtype and BLAS order. Flips are reported per bin of
+    relative distance r = |z| / (|b| + sum|w*x|); the C label is guaranteed for r > gamma_{n+2}."""
     (Xtr, _, ytr, _) = clf_data
     yb = (ytr == 10).astype(int)
     model = linear_model.LogisticRegression(max_iter=2000).fit(Xtr, yb)
-    rng = np.random.default_rng(SEED)
-    w, b = model.coef_[0], model.intercept_[0]
-    X = rng.normal(size=(n, Xtr.shape[1]))
-    X = X - np.outer((X @ w + b) / (w @ w), w)  # z == 0 in exact arithmetic
-    X = X.astype(np.float32)
-    rows = []
+    X = linear_boundary_probes(model, seed=SEED)
+    z = exact_decision_function(model, X)
+    r = np.abs(z) / (np.abs(X.astype(np.float64) * np.asarray(model.coef_[0], np.float64)).sum(1)
+                     + abs(float(model.intercept_[0])))
+    truth = model.classes_[(z > 0).astype(int)]
+    labels = {"sklearn.predict": model.predict(X)}
+    bound = {}
     for real in ("float", "double"):
-        r = verify_predictions(model, X=X, cflags=("-O2", f"-DSKLEARN2C_REAL={real}"))
-        rows.append({"accumulator": real, "n_samples": r.n_samples, "n_mismatches": r.n_mismatches})
-    return rows
+        lib = compile_shared(transpile(model), prefix="model", is_classifier=True, n_features=X.shape[1],
+                             cflags=("-O2", f"-DSKLEARN2C_REAL={real}"))
+        labels[f"C {real}"] = lib.predict(X)
+        bound[real] = linear_rounding_bound(X.shape[1], real)
+    bins = []
+    for lo, hi in zip(BINS[:-1], BINS[1:]):
+        m = (r >= lo) & (r < hi)
+        bins.append({"r_min": lo, "r_max": None if np.isinf(hi) else hi, "n": int(m.sum()),
+                     **{k: int((v[m] != truth[m]).sum()) for k, v in labels.items()}})
+    return {
+        "model": "LogisticRegression (binary)", "n_samples": int(len(X)),
+        "sklearn_coef_dtype": str(model.coef_.dtype),
+        "sklearn_decision_function_dtype": str(model.decision_function(X[:1]).dtype),
+        "bound": bound,
+        "flips_total": {k: int((v != truth).sum()) for k, v in labels.items()},
+        "flips_beyond_bound": {f"C {k}": int((labels[f"C {k}"] != truth)[r > b].sum()) for k, b in bound.items()},
+        "bins": bins,
+    }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="10 trees per forest instead of 50")
     ap.add_argument("-v", "--verbose", action="store_true", help="print each parity report")
+    ap.add_argument("--stress-only", action="store_true", help="only run the linear decision-boundary stress test")
     args = ap.parse_args()
+    if args.stress_only:
+        stress = linear_boundary_stress(datasets()[0])
+        print(json.dumps(stress, indent=1))
+        return
     n_trees = 10 if args.quick else 50
     clf_data, reg_data = datasets()
     have_arm = shutil.which(ARM_CC) is not None
@@ -162,8 +190,10 @@ def print_terminal(rows, stress, have_arm, env, stem):
         flash = f"{r['cortex_m4_flash_bytes']:,}B" if have_arm else "-"
         print(f"{r['model']:<24}{r['n_samples']:>9}{r['n_mismatches']:>9}{flash:>10}{r['latency_ns']:>9.1f}ns")
     print(f"latency: {env['hardware']}")
-    print("boundary stress, binary LogisticRegression on z=0: "
-          + ", ".join(f"{s['accumulator']} {s['n_mismatches']}/{s['n_samples']} mismatches" for s in stress))
+    print(f"boundary stress (binary LogisticRegression, {stress['n_samples']} inputs near z=0, vs exact sign): "
+          + ", ".join(f"{k} {v} flips" for k, v in stress["flips_total"].items())
+          + "; beyond the rounding bound: "
+          + ", ".join(f"{k} {v}" for k, v in stress["flips_beyond_bound"].items()))
     print(f"wrote {OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}/{stem}.md")
 
 
@@ -185,13 +215,23 @@ def render_md(env, rows, stress, have_arm) -> str:
         line += f" {r['latency_ns']:.1f} ns |"
         lines.append(line)
     setup = "\n".join(f"- **{k}**: {v}" for k, v in env.items() if v)
-    st = "\n".join(f"| {s['accumulator']} | {s['n_samples']} | {s['n_mismatches']} |" for s in stress)
+    keys = list(stress["flips_total"])
+    st = [f"| r = \\|z\\| / (\\|b\\| + sum\\|w*x\\|) | samples | " + " | ".join(f"{k} flips" for k in keys) + " |",
+          "|---|---:|" + "---:|" * len(keys)]
+    for b in stress["bins"]:
+        rng = f"[{b['r_min']:.0e}, {b['r_max']:.0e})" if b["r_max"] else f">= {b['r_min']:.0e}"
+        st.append(f"| {rng} | {b['n']} | " + " | ".join(str(b[k]) for k in keys) + " |")
+    bd = stress["bound"]
     return (
         "\n".join(lines)
         + "\n\n" + setup
-        + "\n\n**Linear classifier on its decision boundary** (binary LogisticRegression, inputs projected "
-        "onto z = 0, the worst case for float rounding):\n\n| Accumulator | Samples | Label mismatches |\n"
-        "|---|---:|---:|\n" + st + "\n"
+        + "\n\n**Linear classifier near its decision boundary** (binary LogisticRegression; inputs placed at "
+        "relative distance r from z = 0, then cast to float32). A flip is a label that differs from the exact "
+        "sign of z, computed in rational arithmetic on the float32 inputs. sklearn's own `predict` is shown for "
+        f"comparison: this scikit-learn keeps `coef_` in {stress['sklearn_coef_dtype']} and evaluates the "
+        f"decision function in {stress['sklearn_decision_function_dtype']}.\n\n" + "\n".join(st)
+        + f"\n\nRounding bound gamma_(n+2): float {bd['float']:.1e}, double {bd['double']:.1e}. Flips beyond it: "
+        + ", ".join(f"{k} {v}" for k, v in stress["flips_beyond_bound"].items()) + " (guaranteed 0).\n"
     )
 
 
