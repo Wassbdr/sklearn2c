@@ -80,19 +80,26 @@ def compile_shared(c_source: str, *, prefix: str, is_classifier: bool, n_feature
 
 def object_size(c_source: str, *, cc: str | None = None, cflags: tuple[str, ...] = ("-Os",),
                 size_tool: str | None = None) -> dict:
-    """Compile to an object file and return ``{text, data, bss}`` in bytes."""
+    """Compile to an object file; return ``{text, data, bss, stack}`` in bytes.
+
+    ``stack`` is the sum of every function's static frame from ``-fstack-usage``,
+    an upper bound for one ``predict`` call (the generated code never recurses)."""
     cc = find_compiler(cc)
     size_tool = size_tool or (cc[: -len("gcc")] + "size" if cc.endswith("gcc") else "size")
     with tempfile.TemporaryDirectory(prefix="sklearn2c_") as d:
         src, obj = Path(d) / "m.c", Path(d) / "m.o"
         src.write_text(c_source)
-        _run([cc, "-std=c99", "-Wall", "-Werror", *cflags, "-c", str(src), "-o", str(obj)])
+        _run([cc, "-std=c99", "-Wall", "-Werror", *cflags, "-fstack-usage", "-c", str(src), "-o", str(obj)])
         out = _run([size_tool, "--format=berkeley", str(obj)]).stdout.splitlines()[1].split()
+        su = Path(d) / "m.su"
+        stack = sum(int(line.split("\t")[1]) for line in su.read_text().splitlines() if line.strip()) \
+            if su.exists() else None
     text, data, bss = (int(v) for v in out[:3])
-    return {"text": text, "data": data, "bss": bss}
+    return {"text": text, "data": data, "bss": bss, "stack": stack}
 
 
-_BENCH = r"""#define SKLEARN2C_NO_MAIN
+_BENCH = r"""#define _POSIX_C_SOURCE 199309L
+#define SKLEARN2C_NO_MAIN
 #include "{c_name}"
 #include <stdio.h>
 #include <stdlib.h>

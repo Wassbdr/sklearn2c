@@ -219,9 +219,13 @@ def _emit_tree(spec: ModelSpec, model, p: str) -> str:
 
 
 def _emit_forest(spec: ModelSpec, model, p: str) -> str:
+    """Table-driven forest. Nodes are in sklearn's pre-order, so the left child
+    of an internal node is always ``node + 1``; ``NEXT`` holds the right child
+    for internal nodes and the leaf-table row for leaves (``FEATURE < 0``).
+    Identical leaf rows (e.g. pure leaves) are stored once."""
     P = p.upper()
-    feats, thrs, lefts, rights, roots, leaf_vals = [], [], [], [], [], []
-    n_leaves = 0
+    feats, thrs, nexts, roots = [], [], [], []
+    leaf_rows: dict[tuple, int] = {}
     k = spec.n_classes
     for est in model.estimators_:
         t = est.tree_
@@ -234,35 +238,30 @@ def _emit_forest(spec: ModelSpec, model, p: str) -> str:
             proba /= norm
         for node in range(t.node_count):
             if t.children_left[node] == -1:
+                row = tuple(proba[node].tolist()) if spec.is_classifier else (float(t.value[node, 0, 0]),)
                 feats.append(-1)
                 thrs.append(0.0)
-                lefts.append(n_leaves)  # leaf slot
-                rights.append(0)
-                if spec.is_classifier:
-                    leaf_vals.extend(proba[node])
-                else:
-                    leaf_vals.append(t.value[node, 0, 0])
-                n_leaves += 1
+                nexts.append(leaf_rows.setdefault(row, len(leaf_rows)))
             else:
+                if t.children_left[node] != node + 1:  # pragma: no cover - sklearn invariant
+                    raise UnsupportedModelError("tree nodes are not in pre-order; cannot emit a compact forest")
                 feats.append(int(t.feature[node]))
                 thrs.append(float32_at_or_below(t.threshold[node]))
-                lefts.append(base + int(t.children_left[node]))
-                rights.append(base + int(t.children_right[node]))
+                nexts.append(base + int(t.children_right[node]))
 
-    n_nodes = len(feats)
-    idx_t = _int_type(max(n_nodes, n_leaves))
-    feat_t = _int_type(spec.n_features)
+    idx_t = _int_type(max(len(feats), len(leaf_rows)))
+    feat_t = "int8_t" if spec.n_features <= 127 else _int_type(spec.n_features)
+    leaf_vals = [v for row in leaf_rows for v in row]
     out = [
-        f"#define {P}_N_TREES {len(roots)}\n",
+        f"#define {P}_N_TREES {len(roots)}  /* {len(feats)} nodes, {len(leaf_rows)} distinct leaves */\n",
         _array(feat_t, f"{P}_FEATURE", [str(v) for v in feats], 16),
         _array("float", f"{P}_THRESHOLD", [c_float(v) for v in thrs]),
-        _array(idx_t, f"{P}_LEFT", [str(v) for v in lefts], 16),
-        _array(idx_t, f"{P}_RIGHT", [str(v) for v in rights], 16),
+        _array(idx_t, f"{P}_NEXT", [str(v) for v in nexts], 16),
         _array(idx_t, f"{P}_ROOT", [str(v) for v in roots], 16),
     ]
     walk = f"""        int32_t node = {P}_ROOT[t];
         while ({P}_FEATURE[node] >= 0)
-            node = (x[{P}_FEATURE[node]] <= {P}_THRESHOLD[node]) ? {P}_LEFT[node] : {P}_RIGHT[node];
+            node = (x[{P}_FEATURE[node]] <= {P}_THRESHOLD[node]) ? node + 1 : {P}_NEXT[node];
 """
     if spec.is_classifier:
         out.append(_array("double", f"{P}_LEAF_PROBA", [c_double(v) for v in leaf_vals], 4))
@@ -272,7 +271,7 @@ def _emit_forest(spec: ModelSpec, model, p: str) -> str:
 int32_t {p}_predict_index(const float *x) {{
     double acc[{P}_N_CLASSES] = {{0}};
     for (int32_t t = 0; t < {P}_N_TREES; t++) {{
-{walk}        const double *proba = &{P}_LEAF_PROBA[{P}_LEFT[node] * {P}_N_CLASSES];
+{walk}        const double *proba = &{P}_LEAF_PROBA[{P}_NEXT[node] * {P}_N_CLASSES];
         for (int32_t c = 0; c < {P}_N_CLASSES; c++) acc[c] += proba[c];
     }}
     int32_t best = 0;
@@ -291,7 +290,7 @@ int32_t {p}_predict_index(const float *x) {{
 SKLEARN2C_REAL {p}_predict(const float *x) {{
     SKLEARN2C_REAL acc = 0;
     for (int32_t t = 0; t < {P}_N_TREES; t++) {{
-{walk}        acc += {P}_LEAF_VALUE[{P}_LEFT[node]];
+{walk}        acc += {P}_LEAF_VALUE[{P}_NEXT[node]];
     }}
     return acc / {P}_N_TREES;
 }}
