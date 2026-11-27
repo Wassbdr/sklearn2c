@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 import numpy as np
 
@@ -75,6 +76,50 @@ def probe_inputs(model, n_random: int = 1000, seed: int = 0, X_ref=None, max_bou
             above[i, f] = np.nextafter(le, np.float32(np.inf), dtype=np.float32)
         rows += [on, above]
     return np.concatenate(rows).astype(np.float32)
+
+
+_UNIT_ROUNDOFF = {"float": 2.0 ** -24, "double": 2.0 ** -53}
+
+
+def exact_decision_function(model, X) -> np.ndarray:
+    """Binary linear model: ``intercept_ + coef_ @ x`` in exact rational arithmetic on the
+    float32 inputs the C code receives, rounded once to float64 (the sign is exact).
+
+    This is the reference for inputs near the decision boundary: there, sklearn's own
+    ``predict`` depends on its dtype and BLAS summation order (scikit-learn 1.9 keeps
+    ``coef_`` in float32 for float32 training data), so it is not a stable oracle."""
+    coef = np.atleast_2d(model.coef_)
+    if coef.shape[0] != 1:
+        raise ValueError("exact_decision_function supports binary / single-output linear models")
+    w = [Fraction(float(v)) for v in coef[0]]
+    b = Fraction(float(np.atleast_1d(model.intercept_)[0]))
+    X = np.asarray(X, dtype=np.float32)
+    return np.array([float(b + sum(wi * Fraction(float(xi)) for wi, xi in zip(w, row))) for row in X])
+
+
+def linear_rounding_bound(n_features: int, real: str = "float") -> float:
+    """Relative error bound gamma_{n+2} = (n+2)u / (1-(n+2)u) of the C dot product
+    (n products, n additions + intercept, coefficients rounded to SKLEARN2C_REAL).
+    If ``|z_exact| > bound * (|b| + sum|w_i x_i|)``, the C label equals the exact sign."""
+    k = (n_features + 2) * _UNIT_ROUNDOFF[real]
+    return k / (1 - k)
+
+
+def linear_boundary_probes(model, rel_distances=(0, 1e-7, 3e-7, 1e-6, 3e-6, 1e-5, 1e-4), n_per: int = 300,
+                           seed: int = 0) -> np.ndarray:
+    """Random points moved to ``z = +-d * scale`` of a binary linear model's decision boundary
+    (float64 construction, then cast to the float32 the C code takes)."""
+    w = np.atleast_2d(model.coef_)[0].astype(np.float64)
+    b = float(np.atleast_1d(model.intercept_)[0])
+    rng = np.random.default_rng(seed)
+    out = []
+    for d in rel_distances:
+        X = rng.normal(size=(n_per, w.size))
+        X -= np.outer((X @ w + b) / (w @ w), w)
+        scale = np.abs(X * w).sum(1) + abs(b)
+        X += np.outer(rng.choice([-1.0, 1.0], n_per) * d * scale / (w @ w), w)
+        out.append(X)
+    return np.concatenate(out).astype(np.float32)
 
 
 def _linear_scale(model, X):

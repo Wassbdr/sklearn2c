@@ -9,7 +9,8 @@ from sklearn.datasets import make_classification, make_regression
 
 from sklearn2c import SUPPORTED_MODELS, probe_inputs, transpile, verify_predictions
 from sklearn2c.native import compile_shared
-from sklearn2c.parity import REG_RTOL
+from sklearn2c.parity import (REG_RTOL, exact_decision_function, linear_boundary_probes,
+                              linear_rounding_bound)
 
 pytestmark = requires_gcc
 
@@ -113,3 +114,21 @@ def test_threshold_not_representable_in_float32():
     assert list(model.predict(probes)) == [1, 1, 2, 2]
     lib = compile_shared(transpile(model), prefix="model", is_classifier=True, n_features=1)
     assert list(lib.predict(probes)) == [1, 1, 2, 2]
+
+
+@pytest.mark.parametrize("real", ["float", "double"])
+def test_linear_label_matches_exact_sign_beyond_rounding_bound(real):
+    """Near z = 0 the reference is the exact sign of z (sklearn's own predict there depends on its dtype
+    and BLAS order). Beyond the published rounding bound the C label must equal it, on every compiler."""
+    X, y = make_classification(600, 8, n_informative=5, random_state=1)
+    X = X.astype(np.float32)
+    model = linear_model.LogisticRegression(max_iter=2000).fit(X, y)
+    P = linear_boundary_probes(model, n_per=150, seed=1)
+    z = exact_decision_function(model, P)
+    r = np.abs(z) / (np.abs(P.astype(np.float64) * np.asarray(model.coef_[0], np.float64)).sum(1)
+                     + abs(float(model.intercept_[0])))
+    lib = compile_shared(transpile(model), prefix="model", is_classifier=True, n_features=8,
+                         cflags=("-O2", f"-DSKLEARN2C_REAL={real}"))
+    far = r > linear_rounding_bound(8, real)
+    assert far.sum() > 300
+    np.testing.assert_array_equal(lib.predict(P)[far], model.classes_[(z[far] > 0).astype(int)])
