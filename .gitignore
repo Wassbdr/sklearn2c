@@ -35,3 +35,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# sklearn2c outputs (regenerate with the examples)
+*.joblib
+fault_test.csv
+generated_model.c
+/out/
+showcase/work/
+benchmarks/results/parity_quick.*
