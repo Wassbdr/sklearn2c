@@ -18,7 +18,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 1917,
-      "latency_ns": 3.165,
+      "latency_ns": 2.888,
       "c_lines": 374,
       "cortex_m4_flash_bytes": 1652,
       "cortex_m4_static_ram_bytes": 0,
@@ -32,7 +32,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 872,
-      "latency_ns": 2.44,
+      "latency_ns": 2.379,
       "c_lines": 178,
       "cortex_m4_flash_bytes": 732,
       "cortex_m4_static_ram_bytes": 0,
@@ -46,7 +46,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 82443,
-      "latency_ns": 2016.323,
+      "latency_ns": 1916.527,
       "c_lines": 2900,
       "cortex_m4_flash_bytes": 82320,
       "cortex_m4_static_ram_bytes": 0,
@@ -60,7 +60,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 78555,
-      "latency_ns": 2099.951,
+      "latency_ns": 1833.904,
       "c_lines": 2743,
       "cortex_m4_flash_bytes": 78452,
       "cortex_m4_static_ram_bytes": 0,
@@ -74,7 +74,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 449,
-      "latency_ns": 15.229,
+      "latency_ns": 14.212,
       "c_lines": 49,
       "cortex_m4_flash_bytes": 264,
       "cortex_m4_static_ram_bytes": 0,
@@ -88,7 +88,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 449,
-      "latency_ns": 15.271,
+      "latency_ns": 14.218,
       "c_lines": 49,
       "cortex_m4_flash_bytes": 264,
       "cortex_m4_static_ram_bytes": 0,
@@ -102,7 +102,7 @@
       "n_mismatches": 0,
       "max_abs_error": null,
       "x86_64_object_bytes": 449,
-      "latency_ns": 15.605,
+      "latency_ns": 14.244,
       "c_lines": 49,
       "cortex_m4_flash_bytes": 264,
       "cortex_m4_static_ram_bytes": 0,
@@ -116,7 +116,7 @@
       "n_mismatches": 0,
       "max_abs_error": 8.840276905175415e-06,
       "x86_64_object_bytes": 7689,
-      "latency_ns": 4.566,
+      "latency_ns": 3.887,
       "c_lines": 941,
       "cortex_m4_flash_bytes": 7076,
       "cortex_m4_static_ram_bytes": 0,
@@ -130,7 +130,7 @@
       "n_mismatches": 0,
       "max_abs_error": 8.350996040462633e-06,
       "x86_64_object_bytes": 5797,
-      "latency_ns": 3.694,
+      "latency_ns": 3.537,
       "c_lines": 701,
       "cortex_m4_flash_bytes": 4920,
       "cortex_m4_static_ram_bytes": 0,
@@ -144,7 +144,7 @@
       "n_mismatches": 0,
       "max_abs_error": 6.77556140260549e-05,
       "x86_64_object_bytes": 174216,
-      "latency_ns": 2422.98,
+      "latency_ns": 2387.705,
       "c_lines": 7005,
       "cortex_m4_flash_bytes": 174080,
       "cortex_m4_static_ram_bytes": 0,
@@ -158,7 +158,7 @@
       "n_mismatches": 0,
       "max_abs_error": 7.804677534295479e-05,
       "x86_64_object_bytes": 141068,
-      "latency_ns": 2586.509,
+      "latency_ns": 2472.199,
       "c_lines": 5647,
       "cortex_m4_flash_bytes": 140964,
       "cortex_m4_static_ram_bytes": 0,
@@ -172,7 +172,7 @@
       "n_mismatches": 0,
       "max_abs_error": 6.103515625e-05,
       "x86_64_object_bytes": 256,
-      "latency_ns": 3.493,
+      "latency_ns": 3.086,
       "c_lines": 33,
       "cortex_m4_flash_bytes": 92,
       "cortex_m4_static_ram_bytes": 0,
@@ -186,7 +186,7 @@
       "n_mismatches": 0,
       "max_abs_error": 6.103515625e-05,
       "x86_64_object_bytes": 256,
-      "latency_ns": 3.4,
+      "latency_ns": 3.352,
       "c_lines": 33,
       "cortex_m4_flash_bytes": 92,
       "cortex_m4_static_ram_bytes": 0,
@@ -200,7 +200,7 @@
       "n_mismatches": 0,
       "max_abs_error": 0.0001220703125,
       "x86_64_object_bytes": 256,
-      "latency_ns": 4.137,
+      "latency_ns": 3.502,
       "c_lines": 33,
       "cortex_m4_flash_bytes": 92,
       "cortex_m4_static_ram_bytes": 0,
@@ -214,23 +214,80 @@
       "n_mismatches": 0,
       "max_abs_error": 6.103515625e-05,
       "x86_64_object_bytes": 256,
-      "latency_ns": 4.558,
+      "latency_ns": 3.073,
       "c_lines": 33,
       "cortex_m4_flash_bytes": 92,
       "cortex_m4_static_ram_bytes": 0,
       "cortex_m4_stack_bytes": 16
     }
   ],
-  "linear_boundary_stress": [
-    {
-      "accumulator": "float",
-      "n_samples": 2000,
-      "n_mismatches": 799
+  "linear_boundary_stress": {
+    "model": "LogisticRegression (binary)",
+    "n_samples": 2100,
+    "sklearn_coef_dtype": "float64",
+    "sklearn_decision_function_dtype": "float64",
+    "bound": {
+      "float": 5.960468030254859e-07,
+      "double": 1.1102230246251577e-15
     },
-    {
-      "accumulator": "double",
-      "n_samples": 2000,
-      "n_mismatches": 0
-    }
-  ]
+    "flips_total": {
+      "sklearn.predict": 0,
+      "C float": 123,
+      "C double": 0
+    },
+    "flips_beyond_bound": {
+      "C float": 0,
+      "C double": 0
+    },
+    "bins": [
+      {
+        "r_min": 0.0,
+        "r_max": 1e-08,
+        "n": 226,
+        "sklearn.predict": 0,
+        "C float": 104,
+        "C double": 0
+      },
+      {
+        "r_min": 1e-08,
+        "r_max": 1e-07,
+        "n": 242,
+        "sklearn.predict": 0,
+        "C float": 19,
+        "C double": 0
+      },
+      {
+        "r_min": 1e-07,
+        "r_max": 1e-06,
+        "n": 576,
+        "sklearn.predict": 0,
+        "C float": 0,
+        "C double": 0
+      },
+      {
+        "r_min": 1e-06,
+        "r_max": 1e-05,
+        "n": 602,
+        "sklearn.predict": 0,
+        "C float": 0,
+        "C double": 0
+      },
+      {
+        "r_min": 1e-05,
+        "r_max": 0.0001,
+        "n": 313,
+        "sklearn.predict": 0,
+        "C float": 0,
+        "C double": 0
+      },
+      {
+        "r_min": 0.0001,
+        "r_max": null,
+        "n": 141,
+        "sklearn.predict": 0,
+        "C float": 0,
+        "C double": 0
+      }
+    ]
+  }
 }

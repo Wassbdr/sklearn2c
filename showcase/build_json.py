@@ -16,7 +16,7 @@ fw = re.search(r"fault_forest.*?firmware : flash (\d+) B.*?RAM (\d+) B", arm, re
 tests = (ROOT / "showcase" / "results" / "pytest.txt").read_text().strip().splitlines()[-1]
 n_total = sum(r["n_samples"] for r in res["rows"])
 n_bad = sum(r["n_mismatches"] for r in res["rows"])
-stress = {s["accumulator"]: s for s in res["linear_boundary_stress"]}
+stress = res["linear_boundary_stress"]
 PT = "python benchmarks/parity_table.py"
 
 results = [
@@ -39,10 +39,12 @@ results = [
      "value": f"{int(fw.group(1)):,} B / {fw.group(2)} B" if fw else "n/a",
      "command": "examples/arm_cortex_m/build.sh fault_forest.c",
      "setup": "examples/train_fault_classifier.py --model forest (seed 0); arm-none-eabi-gcc -Os, linked, not run"},
-    {"label": "Linear classifier inputs exactly on the decision boundary, label flips",
-     "value": f"float {stress['float']['n_mismatches']}/{stress['float']['n_samples']}, "
-              f"double {stress['double']['n_mismatches']}/{stress['double']['n_samples']}",
-     "command": PT, "setup": f"binary LogisticRegression, inputs projected onto z=0, seed 0; {hw}"},
+    {"label": "Linear classifier near its decision boundary: C labels that differ from the exact sign of z "
+              "beyond the published rounding bound",
+     "value": ", ".join(f"{k}: {v}/{stress['n_samples']}" for k, v in stress["flips_beyond_bound"].items()),
+     "command": PT,
+     "setup": f"binary LogisticRegression, inputs at relative distance 0..1e-4 from z=0 (seed 0), exact rational "
+              f"reference; total flips {stress['flips_total']}; {setup['compiler']}; {hw}"},
     {"label": "Test suite (pytest, compiles every model with gcc)", "value": tests,
      "command": "python -m pytest", "setup": f"{setup['versions']}; {hw}"},
 ]
@@ -72,8 +74,9 @@ doc = {
     "results": results,
     "limits": [
         "Integer class labels only (int32); string labels must be encoded with LabelEncoder first.",
-        "Linear models accumulate in float by default; inputs within float rounding of the decision boundary can "
-        "flip label (compile with -DSKLEARN2C_REAL=double for exact parity).",
+        "Linear models accumulate in float by default: inputs within the rounding bound of the decision boundary "
+        "(|z| <= ~6e-7 of sum|w*x| for 8 features) can flip label. -DSKLEARN2C_REAL=double shrinks the band to "
+        "~1e-15; neither is bit-identical to sklearn there, whose own result depends on its dtype and BLAS order.",
         "Forest classifiers accumulate probabilities in double to match sklearn exactly; this is software-emulated "
         "on Cortex-M4F.",
         "No Pipeline / preprocessing export, no NaN (missing value) routing, no gradient boosting, SVM kernels or MLPs.",

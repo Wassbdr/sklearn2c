@@ -15,11 +15,11 @@ sklearn2c fault_tree.joblib -o fault_tree.c --verify-data fault_test.csv
 | Result | Value | Setup |
 |---|---|---|
 | Compiled C vs `sklearn.predict`, 15 estimator types | **0 mismatches / 32,062 samples** | synthetic `make_classification`/`make_regression`, seed 0; held-out + random + on-threshold probes; gcc 11.4 `-O2` via ctypes |
-| Decision tree (max_depth=8) | **3.2 ns/sample**, 1,652 B Cortex-M4 flash | latency on x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor |
-| Random forest (50 trees, max_depth=8) | **2.02 us/sample**, 80.4 KiB Cortex-M4 flash | same |
-| Multiclass LogisticRegression (3 classes, 8 features) | **15.2 ns/sample**, 264 B Cortex-M4 flash | same |
+| Decision tree (max_depth=8) | **2.9 ns/sample**, 1,652 B Cortex-M4 flash | latency on x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor |
+| Random forest (50 trees, max_depth=8) | **1.92 us/sample**, 80.4 KiB Cortex-M4 flash | same |
+| Multiclass LogisticRegression (3 classes, 8 features) | **14.2 ns/sample**, 264 B Cortex-M4 flash | same |
 | Bare-metal Cortex-M4F firmware with the 20-tree fault forest | **4,276 B flash / 132 B RAM** (+ stack) | `examples/arm_cortex_m/build.sh`, arm-none-eabi-gcc 10.3.1 `-Os`, linked, not run |
-| Linear classifier fed inputs exactly on its decision boundary | float: 799/2000 flips, double: 0/2000 | worst case by construction, see Numeric limits |
+| Linear classifier probed at 0 to 1e-4 relative distance from its decision boundary | **0/2100 wrong labels** beyond the float rounding bound (6e-7); float flips only below it | reference = exact sign of z, checked on every CI combination; see Numeric limits |
 
 All numbers: `python benchmarks/parity_table.py` and `bash showcase/make_showcase.sh`, run on x86 VM, not a microcontroller: Intel(R) Xeon(R) Processor.
 
@@ -85,7 +85,7 @@ Detection is an exact class-name allow-list; anything else (KNN, SVC, GradientBo
 | Tree thresholds | Emitted as the largest float32 `<=` the float64 threshold, so `x <= t` routes every float32 input exactly as sklearn does. Covered by on-threshold and one-ULP-above probes. |
 | Classification parity | Exact label equality, no tolerance. |
 | Regression parity | `abs(C - sklearn) <= 1e-5 * max(1, abs(y), sum(abs(w * x)))` (`sklearn2c.parity.REG_RTOL`). Max error observed is in the table below. |
-| Linear accumulator | `SKLEARN2C_REAL`, `float` by default. Inputs within float rounding of a linear decision boundary can flip label (measured below); compile with `-DSKLEARN2C_REAL=double` for exact parity at the cost of software double on Cortex-M4F. |
+| Linear accumulator | `SKLEARN2C_REAL`, `float` by default. If \|z\| > gamma_(n+2) * (\|b\| + sum\|w*x\|) (6.0e-7 for 8 features), the C label is the exact sign of z; closer to the boundary it can flip. `-DSKLEARN2C_REAL=double` narrows that band to 1.1e-15 (software double on Cortex-M4F). Neither is bit-identical to sklearn inside the band: sklearn's own label there depends on its dtype and BLAS order (scikit-learn 1.9 keeps `coef_` in float32 for float32 data and itself disagrees with the exact sign on 144/2100 stress inputs with gcc 15). |
 | Forest classifiers | Average leaf probabilities in `double` (as sklearn does), so ties break identically. |
 | Missing values | NaN routing (sklearn >= 1.3 `missing_go_to_left`) is not exported. |
 
@@ -95,21 +95,21 @@ Every number below is written by `python benchmarks/parity_table.py` to [`benchm
 
 | Model | Samples compared | Mismatches | Max abs err | x86-64 .o (B) | Cortex-M4 flash (B) | Cortex-M4 RAM: static + stack (B) | Latency / sample (x86 VM) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| DecisionTreeClassifier (max_depth=8) | 1176 | 0 | exact | 1,917 | 1,652 | 0 + 8 | 3.2 ns |
+| DecisionTreeClassifier (max_depth=8) | 1176 | 0 | exact | 1,917 | 1,652 | 0 + 8 | 2.9 ns |
 | ExtraTreeClassifier (max_depth=8) | 1078 | 0 | exact | 872 | 732 | 0 + 8 | 2.4 ns |
-| RandomForestClassifier (50 trees, max_depth=8) | 5000 | 0 | exact | 82,443 | 82,320 | 0 + 72 | 2016.3 ns |
-| ExtraTreesClassifier (50 trees, max_depth=8) | 5000 | 0 | exact | 78,555 | 78,452 | 0 + 72 | 2100.0 ns |
-| LogisticRegression (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 15.2 ns |
-| RidgeClassifier (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 15.3 ns |
-| LinearSVC (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 15.6 ns |
-| DecisionTreeRegressor (max_depth=8) | 1464 | 0 | 8.8e-06 | 7,689 | 7,076 | 0 + 0 | 4.6 ns |
-| ExtraTreeRegressor (max_depth=8) | 1344 | 0 | 8.4e-06 | 5,797 | 4,920 | 0 + 0 | 3.7 ns |
-| RandomForestRegressor (50 trees, max_depth=8) | 5000 | 0 | 6.8e-05 | 174,216 | 174,080 | 0 + 20 | 2423.0 ns |
-| ExtraTreesRegressor (50 trees, max_depth=8) | 5000 | 0 | 7.8e-05 | 141,068 | 140,964 | 0 + 20 | 2586.5 ns |
-| LinearRegression | 1000 | 0 | 6.1e-05 | 256 | 92 | 0 + 16 | 3.5 ns |
+| RandomForestClassifier (50 trees, max_depth=8) | 5000 | 0 | exact | 82,443 | 82,320 | 0 + 72 | 1916.5 ns |
+| ExtraTreesClassifier (50 trees, max_depth=8) | 5000 | 0 | exact | 78,555 | 78,452 | 0 + 72 | 1833.9 ns |
+| LogisticRegression (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 14.2 ns |
+| RidgeClassifier (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 14.2 ns |
+| LinearSVC (3 classes) | 1000 | 0 | exact | 449 | 264 | 0 + 52 | 14.2 ns |
+| DecisionTreeRegressor (max_depth=8) | 1464 | 0 | 8.8e-06 | 7,689 | 7,076 | 0 + 0 | 3.9 ns |
+| ExtraTreeRegressor (max_depth=8) | 1344 | 0 | 8.4e-06 | 5,797 | 4,920 | 0 + 0 | 3.5 ns |
+| RandomForestRegressor (50 trees, max_depth=8) | 5000 | 0 | 6.8e-05 | 174,216 | 174,080 | 0 + 20 | 2387.7 ns |
+| ExtraTreesRegressor (50 trees, max_depth=8) | 5000 | 0 | 7.8e-05 | 141,068 | 140,964 | 0 + 20 | 2472.2 ns |
+| LinearRegression | 1000 | 0 | 6.1e-05 | 256 | 92 | 0 + 16 | 3.1 ns |
 | Ridge (alpha=1) | 1000 | 0 | 6.1e-05 | 256 | 92 | 0 + 16 | 3.4 ns |
-| Lasso (alpha=0.1) | 1000 | 0 | 0.00012 | 256 | 92 | 0 + 16 | 4.1 ns |
-| ElasticNet (alpha=0.1) | 1000 | 0 | 6.1e-05 | 256 | 92 | 0 + 16 | 4.6 ns |
+| Lasso (alpha=0.1) | 1000 | 0 | 0.00012 | 256 | 92 | 0 + 16 | 3.5 ns |
+| ElasticNet (alpha=0.1) | 1000 | 0 | 6.1e-05 | 256 | 92 | 0 + 16 | 3.1 ns |
 
 - **data**: make_classification(2000, 8 features, 3 classes -> labels 10/20/30) and make_regression(2000, 8 features, noise=10), random_state=0, 75/25 split
 - **compared**: held-out test rows (500) + 500 random rows + split-boundary probes (float32 on each threshold and one ulp above)
@@ -120,12 +120,18 @@ Every number below is written by `python benchmarks/parity_table.py` to [`benchm
 - **regression_tolerance**: |C - sklearn| <= 1e-5 * max(1, |y|, sum|w*x|)
 - **latency**: best of 7 passes over the 500 test rows, per sample, single thread
 
-**Linear classifier on its decision boundary** (binary LogisticRegression, inputs projected onto z = 0, the worst case for float rounding):
+**Linear classifier near its decision boundary** (binary LogisticRegression; inputs placed at relative distance r from z = 0, then cast to float32). A flip is a label that differs from the exact sign of z, computed in rational arithmetic on the float32 inputs. sklearn's own `predict` is shown for comparison: this scikit-learn keeps `coef_` in float64 and evaluates the decision function in float64.
 
-| Accumulator | Samples | Label mismatches |
-|---|---:|---:|
-| float | 2000 | 799 |
-| double | 2000 | 0 |
+| r = \|z\| / (\|b\| + sum\|w*x\|) | samples | sklearn.predict flips | C float flips | C double flips |
+|---|---:|---:|---:|---:|
+| [0e+00, 1e-08) | 226 | 0 | 104 | 0 |
+| [1e-08, 1e-07) | 242 | 0 | 19 | 0 |
+| [1e-07, 1e-06) | 576 | 0 | 0 | 0 |
+| [1e-06, 1e-05) | 602 | 0 | 0 | 0 |
+| [1e-05, 1e-04) | 313 | 0 | 0 | 0 |
+| >= 1e-04 | 141 | 0 | 0 | 0 |
+
+Rounding bound gamma_(n+2): float 6.0e-07, double 1.1e-15. Flips beyond it: C float 0, C double 0 (guaranteed 0).
 
 ## Cortex-M example
 

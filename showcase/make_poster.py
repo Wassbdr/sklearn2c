@@ -99,7 +99,6 @@ ax.text(0.03, 0.22, "labels: exact match;  regression: |err| <= 1e-5*scale\n"
         "flash: arm-none-eabi-gcc -Os, Cortex-M4F\n"
         "latency: x86 VM, not a microcontroller", color=DIM, fontsize=8.6, va="top",
         transform=ax.transAxes, family="DejaVu Sans Mono", linespacing=1.5)
-bs = {b["accumulator"]: b for b in res["linear_boundary_stress"]}
 fig.text(0.03, 0.045, f"{sum(r['n_samples'] for r in res['rows']):,} samples compared across "
          f"{len(res['rows'])} estimator types, {sum(r['n_mismatches'] for r in res['rows'])} mismatches.   "
          "pip install .  ->  sklearn2c model.joblib -o model.c --verify", color=FG, fontsize=11)
