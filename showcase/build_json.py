@@ -82,7 +82,7 @@ doc = {
         "No Pipeline / preprocessing export, no NaN (missing value) routing, no gradient boosting, SVM kernels or MLPs.",
         "Latency measured on an x86 VM, not on a microcontroller; ARM builds are compiled and linked, not run.",
     ],
-    "role": "TODO",
+    "role": "Started as a team project. I now develop and maintain it alone.",
     "repo": "https://github.com/Wassbdr/sklearn2c",
 }
 (ROOT / "showcase" / "showcase.json").write_text(json.dumps(doc, indent=2) + "\n")
